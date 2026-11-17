@@ -199,35 +199,98 @@ class GameWindow:
     # -----------------------------
     def draw_info(self):
 
+        # Current money
         money_text = self.font.render(
             f"Money: ${self.model.money}",
             True,
             (255, 255, 255)
         )
 
+        # Remaining time
         time_text = self.font.render(
-            f"Time: {int(self.model.remaining_time)}",
+            f"Time: {int(self.model.remaining_time)}s",
             True,
             (255, 255, 255)
         )
 
+        # Current level
+        level_text = self.font.render(
+            f"Level: {self.model.level}",
+            True,
+            (255, 230, 80)
+        )
+
+        # Target money
         target_text = self.small_font.render(
             f"Target: ${self.model.target_money}",
             True,
             (255, 255, 255)
         )
 
-        self.screen.blit(money_text, (30, 25))
-        self.screen.blit(time_text, (780, 25))
-        self.screen.blit(target_text, (30, 65))
+        # Number of remaining items
+        items_text = self.small_font.render(
+            f"Items: {len(self.model.items)}",
+            True,
+            (255, 255, 255)
+        )
 
+        # Display information
+        self.screen.blit(money_text, (30, 20))
+        self.screen.blit(level_text, (30, 60))
+
+        self.screen.blit(time_text, (780, 20))
+        self.screen.blit(target_text, (780, 60))
+        self.screen.blit(items_text, (780, 95))
+
+        # Instructions
         instruction = self.small_font.render(
             "SPACE: Launch Hook     ESC: Quit",
             True,
             (255, 255, 255)
         )
 
-        self.screen.blit(instruction, (350, 650))
+        self.screen.blit(
+            instruction,
+            instruction.get_rect(
+                center=(500, 675)
+            )
+        )
+
+        # Money progress bar
+        bar_x = 350
+        bar_y = 35
+        bar_width = 300
+        bar_height = 20
+
+        pygame.draw.rect(
+            self.screen,
+            (80, 80, 80),
+            (bar_x, bar_y, bar_width, bar_height)
+        )
+
+        progress = min(
+            self.model.money / max(self.model.target_money, 1),
+            1.0
+        )
+
+        pygame.draw.rect(
+            self.screen,
+            (50, 220, 100),
+            (
+                bar_x,
+                bar_y,
+                int(bar_width * progress),
+                bar_height
+            )
+        )
+
+        pygame.draw.rect(
+            self.screen,
+            (255, 255, 255),
+            (bar_x, bar_y, bar_width, bar_height),
+            2
+        )
+
 
     # -----------------------------
     # Draw game status overlay
