@@ -7,6 +7,8 @@ class GameModel:
         self.width = 1000
         self.height = 700
 
+        # Hook pivot position
+        self.pivot = (500, 125)
         # Hook pivot
         self.pivot_x = 500
         self.pivot_y = 125

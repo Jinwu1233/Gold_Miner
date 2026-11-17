@@ -1,37 +1,43 @@
 
 import pygame
 import math
-
-from game_model import GameModel
+import asyncio
 
 
 class GameWindow:
-    def __init__(self):
+
+    def __init__(self, model, agent):
         pygame.init()
 
-        self.model = GameModel()
+        self.model = model
+        self.agent = agent
+
+        self.width = 1000
+        self.height = 700
 
         self.screen = pygame.display.set_mode(
-            (self.model.width, self.model.height)
+            (self.width, self.height)
         )
-
-        pygame.display.set_caption("Gold Miner")
+        pygame.display.set_caption("Gold Miner - SPADE Agent")
 
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont("Arial", 28, bold=True)
-        self.small_font = pygame.font.SysFont("Arial", 20)
+
+        self.font = pygame.font.SysFont("arial", 32)
+        self.small_font = pygame.font.SysFont("arial", 22)
+        self.title_font = pygame.font.SysFont("arial", 42, bold=True)
 
         self.running = True
 
-    
+    # -----------------------------
+    # Handle keyboard and window events
+    # -----------------------------
     def handle_events(self):
+
         for event in pygame.event.get():
 
-            # Window close button
             if event.type == pygame.QUIT:
                 self.running = False
 
-            # Keyboard events
             elif event.type == pygame.KEYDOWN:
 
                 if event.key == pygame.K_SPACE:
@@ -41,153 +47,158 @@ class GameWindow:
                     self.running = False
 
                 elif event.key == pygame.K_r:
+
                     if self.model.game_status in ("WON", "LOST"):
-                        self.model.restart()
+                        self.agent.restart_requested.set()
 
-
+    # -----------------------------
+    # Draw background
+    # -----------------------------
     def draw_background(self):
-        # Sky
-        self.screen.fill((110, 190, 235))
 
-        # Underground
+        self.screen.fill((25, 35, 55))
+
+        # Sky
         pygame.draw.rect(
             self.screen,
-            (130, 85, 45),
-            (0, 180, self.model.width, 520)
+            (80, 160, 210),
+            (0, 0, self.width, 180)
+        )
+
+        # Ground
+        pygame.draw.rect(
+            self.screen,
+            (110, 75, 40),
+            (0, 180, self.width, self.height - 180)
         )
 
         # Ground surface
-        pygame.draw.rect(
+        pygame.draw.line(
             self.screen,
-            (70, 150, 55),
-            (0, 165, self.model.width, 25)
+            (80, 180, 80),
+            (0, 180),
+            (self.width, 180),
+            8
         )
 
-        # Underground layers
-        for y in [300, 450, 600]:
-            pygame.draw.line(
-                self.screen,
-                (160, 110, 65),
-                (0, y),
-                (self.model.width, y),
-                3
-            )
-
+    # -----------------------------
+    # Draw miner
+    # -----------------------------
     def draw_miner(self):
-        x = self.model.pivot_x
-        y = self.model.pivot_y
 
-        # Head
+        miner_x = 500
+        miner_y = 105
+
+        # Body
         pygame.draw.circle(
             self.screen,
-            (255, 190, 120),
-            (x, 65),
-            22
+            (255, 200, 100),
+            (miner_x, miner_y),
+            25
         )
 
-        # Helmet
-        pygame.draw.arc(
+        # Hat
+        pygame.draw.rect(
             self.screen,
-            (245, 190, 40),
-            (x - 25, 40, 50, 35),
-            math.pi,
-            2 * math.pi,
-            8
+            (120, 60, 20),
+            (miner_x - 25, miner_y - 28, 50, 10)
         )
 
         # Body
         pygame.draw.rect(
             self.screen,
-            (40, 70, 160),
-            (x - 22, 88, 44, 42),
-            border_radius=8
+            (40, 80, 180),
+            (miner_x - 20, miner_y + 20, 40, 45)
         )
 
-        # Arms
-        pygame.draw.line(
-            self.screen,
-            (255, 190, 120),
-            (x - 20, 100),
-            (x - 35, 120),
-            8
-        )
-
-        pygame.draw.line(
-            self.screen,
-            (255, 190, 120),
-            (x + 20, 100),
-            (x + 35, 120),
-            8
-        )
-
-        # Hook machine
-        pygame.draw.rect(
-            self.screen,
-            (70, 70, 70),
-            (x - 18, y - 8, 36, 18),
-            border_radius=5
-        )
-
+    # -----------------------------
+    # Draw hook
+    # -----------------------------
     def draw_hook(self):
-        model = self.model
 
-        # Rope
+        pivot_x, pivot_y = self.model.pivot
+
+        hook_x = self.model.hook_x
+        hook_y = self.model.hook_y
+
         pygame.draw.line(
             self.screen,
-            (40, 40, 40),
-            (model.pivot_x, model.pivot_y),
-            (int(model.hook_x), int(model.hook_y)),
-            4
-        )
-
-        # Hook ring
-        pygame.draw.circle(
-            self.screen,
-            (190, 190, 190),
-            (int(model.hook_x), int(model.hook_y)),
-            12,
+            (30, 30, 30),
+            (pivot_x, pivot_y),
+            (hook_x, hook_y),
             4
         )
 
         # Hook tip
+        pygame.draw.circle(
+            self.screen,
+            (220, 220, 220),
+            (int(hook_x), int(hook_y)),
+            10
+        )
+
         pygame.draw.arc(
             self.screen,
-            (210, 210, 210),
+            (220, 220, 220),
             (
-                int(model.hook_x) - 12,
-                int(model.hook_y),
+                int(hook_x) - 10,
+                int(hook_y) - 5,
                 25,
                 25
             ),
-            0,
             math.pi,
+            math.pi * 1.8,
             4
         )
 
-    
+    # -----------------------------
+    # Draw items
+    # -----------------------------
     def draw_items(self):
+
         for item in self.model.items:
+
             x = int(item["x"])
             y = int(item["y"])
             radius = item["radius"]
+            name = item["name"]
+
+            if name == "Small Gold":
+                color = (255, 215, 0)
+
+            elif name == "Big Gold":
+                color = (255, 170, 0)
+
+            elif name == "Diamond":
+                color = (0, 230, 255)
+
+            elif name == "Rock":
+                color = (110, 110, 110)
+
+            else:
+                color = (180, 180, 180)
 
             pygame.draw.circle(
                 self.screen,
-                item["color"],
+                color,
                 (x, y),
                 radius
             )
 
-            # Highlight
+            # Item outline
             pygame.draw.circle(
                 self.screen,
-                (255, 255, 255),
-                (x - radius // 3, y - radius // 3),
-                max(3, radius // 5)
+                (40, 40, 40),
+                (x, y),
+                radius,
+                2
             )
 
+    # -----------------------------
+    # Draw score and timer
+    # -----------------------------
+    def draw_info(self):
 
-    def draw_ui(self):
         money_text = self.font.render(
             f"Money: ${self.model.money}",
             True,
@@ -195,85 +206,59 @@ class GameWindow:
         )
 
         time_text = self.font.render(
-            f"Time: {int(self.model.remaining_time)}s",
+            f"Time: {int(self.model.remaining_time)}",
             True,
             (255, 255, 255)
         )
 
-
-
-        target_text = self.font.render(
+        target_text = self.small_font.render(
             f"Target: ${self.model.target_money}",
             True,
             (255, 255, 255)
         )
 
-        self.screen.blit(money_text, (20, 20))
-        self.screen.blit(target_text, (750, 20))
-        self.screen.blit(time_text, (400, 20))
-        if self.model.hook_state == "AIMING":
-            message = "Press SPACE to launch the hook"
-        else:
-            message = self.model.hook_state
+        self.screen.blit(money_text, (30, 25))
+        self.screen.blit(time_text, (780, 25))
+        self.screen.blit(target_text, (30, 65))
 
-        text = self.small_font.render(
-            message,
+        instruction = self.small_font.render(
+            "SPACE: Launch Hook     ESC: Quit",
             True,
             (255, 255, 255)
         )
 
-        self.screen.blit(text, (20, 65))
+        self.screen.blit(instruction, (350, 650))
 
-    def draw(self):
-        self.draw_background()
-        self.draw_items()
-        self.draw_miner()
-        self.draw_hook()
-        self.draw_ui()
-        self.draw_game_over()
-        pygame.display.flip()
-
-    def run(self):
-        while self.running:
-            dt = self.clock.tick(60) / 1000.0
-
-            self.handle_events()
-
-            if self.model.game_status == "PLAYING":
-
-                self.model.update_timer(dt)
-
-            if self.model.game_status == "PLAYING":
-                if self.model.hook_state == "AIMING":
-                    self.model.update_aiming(dt)
-                else:
-                    self.model.update_hook(dt)
-
-            self.draw()
-
-        pygame.quit()
-
+    # -----------------------------
+    # Draw game status overlay
+    # -----------------------------
     def draw_game_over(self):
-        if self.model.game_status == "PLAYING":
+
+        if self.model.game_status not in ("WON", "LOST"):
             return
 
         overlay = pygame.Surface(
-            (self.model.width, self.model.height),
-            pygame.SRCALPHA
+            (self.width, self.height)
         )
-        overlay.fill((0, 0, 0, 170))
+
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+
         self.screen.blit(overlay, (0, 0))
 
         if self.model.game_status == "WON":
-            message = "YOU WIN!"
-            color = (255, 220, 0)
-        else:
-            message = "GAME OVER!"
-            color = (255, 80, 80)
+            result_text = "YOU WIN!"
+            result_color = (255, 215, 0)
 
-        title = pygame.font.SysFont(
-            "Arial", 64, bold=True
-        ).render(message, True, color)
+        else:
+            result_text = "GAME OVER!"
+            result_color = (255, 80, 80)
+
+        title = self.title_font.render(
+            result_text,
+            True,
+            result_color
+        )
 
         score = self.font.render(
             f"Final Money: ${self.model.money}",
@@ -282,24 +267,79 @@ class GameWindow:
         )
 
         restart = self.small_font.render(
-            "Press R to restart",
+            "Press R to Restart",
             True,
             (255, 255, 255)
+        )
+
+        quit_text = self.small_font.render(
+            "Press ESC to Quit",
+            True,
+            (200, 200, 200)
         )
 
         self.screen.blit(
             title,
             title.get_rect(center=(500, 280))
         )
+
         self.screen.blit(
             score,
-            score.get_rect(center=(500, 360))
+            score.get_rect(center=(500, 350))
         )
+
         self.screen.blit(
             restart,
             restart.get_rect(center=(500, 420))
         )
 
+        self.screen.blit(
+            quit_text,
+            quit_text.get_rect(center=(500, 460))
+        )
 
-if __name__ == "__main__":
-    GameWindow().run()
+    # -----------------------------
+    # Draw complete game screen
+    # -----------------------------
+    def draw(self):
+
+        self.draw_background()
+        self.draw_miner()
+        self.draw_items()
+        self.draw_hook()
+        self.draw_info()
+        self.draw_game_over()
+
+        pygame.display.flip()
+
+    # -----------------------------
+    # Main asynchronous game loop
+    # -----------------------------
+    async def run(self):
+
+        while self.running:
+
+            dt = self.clock.tick(60) / 1000.0
+
+            self.handle_events()
+
+            # Update countdown timer
+            if self.model.game_status == "PLAYING":
+                self.model.update_timer(dt)
+
+            # Update game objects
+            if self.model.game_status == "PLAYING":
+
+                if self.model.hook_state == "AIMING":
+                    self.model.update_aiming(dt)
+
+                else:
+                    self.model.update_hook(dt)
+
+            # Render the game
+            self.draw()
+
+            # Allow SPADE FSM behaviours to execute
+            await asyncio.sleep(0)
+
+        pygame.quit()

@@ -1,132 +1,121 @@
 
 import asyncio
-import random
-import time
 
 from spade.behaviour import State
 
-from game_config import GAME_TIME, TARGET_MONEY, ITEMS
-
 
 class StartState(State):
-    """
-    Initialize the game before the miner starts working.
-    """
+    """Initialize the FSM for a new game."""
 
     async def run(self):
         agent = self.agent
+        model = agent.model
 
-        agent.money = 0
-        agent.start_time = time.monotonic()
-        agent.current_item = None
         agent.round_number = 0
 
         print("\n========== GOLD MINER ==========")
         print("Welcome to the Gold Mine!")
-        print(f"Target money: ${TARGET_MONEY}")
-        print(f"Time limit: {GAME_TIME} seconds")
+        print(f"Target money: ${model.target_money}")
+        print(f"Time limit: {model.time_limit} seconds")
         print("================================\n")
 
         self.set_next_state("AIMING")
 
 
 class AimingState(State):
-    """
-    Decide whether the miner can start another mining attempt.
-    """
+    """Wait for the player to launch the hook."""
 
     async def run(self):
         agent = self.agent
+        model = agent.model
 
-        elapsed = time.monotonic() - agent.start_time
-        remaining = GAME_TIME - elapsed
+        print("[FSM] AIMING: Waiting for player...")
 
-        print(f"\nTime remaining: {max(0, int(remaining))} seconds")
-        print(f"Current money: ${agent.money}")
+        while model.game_status == "PLAYING":
+            if model.hook_state != "AIMING":
+                agent.round_number += 1
+                print(f"[FSM] Round {agent.round_number}")
+                self.set_next_state("LOWERING")
+                return
 
-        # Give the player a short moment before launching the claw.
-        await asyncio.sleep(1)
+            await asyncio.sleep(0.05)
 
-        self.set_next_state("LOWERING")
+        self.set_next_state("CHECKING")
 
 
 class LoweringState(State):
-    """
-    Simulate the claw moving down into the mine.
-    """
+    """Monitor the hook while it moves downward."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
 
-        agent.round_number += 1
+        print("[FSM] LOWERING: Hook is moving down...")
 
-        print(f"\n--- Mining Round {agent.round_number} ---")
-        print("The claw is moving down...")
+        while model.game_status == "PLAYING":
+            if model.hook_state == "PULLING":
+                print("[FSM] Hook caught an item or reached the bottom.")
+                self.set_next_state("PULLING")
+                return
 
-        await asyncio.sleep(1)
+            await asyncio.sleep(0.05)
 
-        self.set_next_state("PULLING")
+        self.set_next_state("CHECKING")
 
 
 class PullingState(State):
-    """
-    Randomly select an object and simulate pulling it up.
-    """
+    """Wait until the hook returns to the miner."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
 
-        # Each mining attempt can produce a different object.
-        agent.current_item = random.choice(ITEMS)
+        print("[FSM] PULLING: Hook is returning...")
 
-        item = agent.current_item
+        while model.game_status == "PLAYING":
+            if model.hook_state == "AIMING":
+                print("[FSM] Hook returned to the miner.")
+                self.set_next_state("SELLING")
+                return
 
-        print(f"The claw caught: {item['name']}")
-        print(f"Pulling time: {item['weight']} seconds")
+            await asyncio.sleep(0.05)
 
-        await asyncio.sleep(item["weight"])
-
-        print("The claw has returned to the surface!")
-
-        self.set_next_state("SELLING")
+        self.set_next_state("CHECKING")
 
 
 class SellingState(State):
-    """
-    Sell the collected object and update the player's money.
-    """
+    """Confirm that the collected item has been sold."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
 
-        item = agent.current_item
-        value = item["value"]
+        print("[FSM] SELLING: Checking collected item...")
 
-        agent.money += value
-
-        print(f"Sold: {item['name']}")
-        print(f"Earned: ${value}")
-        print(f"Total money: ${agent.money}")
+        # GameModel has already updated the money
+        # when the item reaches the miner.
+        print(f"[FSM] Current money: ${model.money}")
 
         self.set_next_state("CHECKING")
 
 
 class CheckingState(State):
-    """
-    Check whether the player has won or run out of time.
-    """
+    """Check the game result and decide the next state."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
 
-        elapsed = time.monotonic() - agent.start_time
+        print("[FSM] CHECKING: Checking game status...")
 
-        if agent.money >= TARGET_MONEY:
-            print("\nYou reached the target!")
+        if model.money >= model.target_money:
+            model.game_status = "WON"
             self.set_next_state("VICTORY")
 
-        elif elapsed >= GAME_TIME:
-            print("\nTime is up!")
+        elif model.game_status == "WON":
+            self.set_next_state("VICTORY")
+
+        elif model.game_status == "LOST":
+            self.set_next_state("FAILED")
+
+        elif model.remaining_time <= 0:
+            model.game_status = "LOST"
             self.set_next_state("FAILED")
 
         else:
@@ -134,54 +123,50 @@ class CheckingState(State):
 
 
 class VictoryState(State):
-    """
-    Display the result when the player reaches the target.
-    """
+    """Handle a winning result."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
+
+        model.game_status = "WON"
 
         print("\n********************************")
         print("          YOU WIN!")
         print("********************************")
-        print(f"Final money: ${agent.money}")
+        print(f"Final money: ${model.money}")
 
         self.set_next_state("END")
 
 
 class FailedState(State):
-    """
-    Display the result when the time limit is reached.
-    """
+    """Handle a losing result."""
 
     async def run(self):
-        agent = self.agent
+        model = self.agent.model
+
+        model.game_status = "LOST"
 
         print("\n********************************")
         print("          GAME OVER!")
         print("********************************")
-        print(f"Final money: ${agent.money}")
-        print(f"Target money: ${TARGET_MONEY}")
+        print(f"Final money: ${model.money}")
+        print(f"Target money: ${model.target_money}")
 
         self.set_next_state("END")
 
 
 class EndState(State):
-    """
-    Display the final game summary.
-    """
+    """Finish the FSM execution."""
 
     async def run(self):
         agent = self.agent
-
-        elapsed = time.monotonic() - agent.start_time
+        model = agent.model
 
         print("\n========== GAME SUMMARY ==========")
-        print(f"Total money: ${agent.money}")
+        print(f"Total money: ${model.money}")
         print(f"Mining rounds: {agent.round_number}")
-        print(f"Time used: {int(elapsed)} seconds")
+        print(f"Time used: {int(model.time_limit - model.remaining_time)} seconds")
         print("Thanks for playing Gold Miner!")
         print("==================================")
+
         agent.game_finished.set()
-        # No next state: the FSM execution finishes here.
-        
